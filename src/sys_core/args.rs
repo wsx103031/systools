@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use clap::{Parser, Subcommand};
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -5,17 +7,36 @@ pub struct ViewArgs {
     /// Displays different manitude of data,e.g., kb, mb, gb.
     #[arg(short, long,  action = clap::ArgAction::Count)]
     pub magnitude: u8,
+    #[arg(short, long)]
+    pub output: Option<PathBuf>,
 
     #[command(subcommand)]
     pub command: Option<Objective>,
 }
 
-#[derive(Subcommand, Debug)]
+#[derive(Subcommand, Debug, Clone, PartialEq, Eq)]
 pub enum Objective {
     Component {},
-    Cpu {},
+    Cpu {
+        #[arg(default_value = "10")]
+        limit: u8,
+        #[arg(default_value = "3")]
+        interval: u64,
+    },
     Disk {},
     Network {},
     Ram {},
     System {},
+}
+
+impl Objective {
+    fn _require_dynamic_update(&self) -> bool {
+        match self {
+            Objective::Cpu { .. } => true,
+
+            Objective::Network {} => true,
+            Objective::Ram {} => true,
+            _other => false,
+        }
+    }
 }

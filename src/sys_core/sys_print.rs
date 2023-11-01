@@ -1,14 +1,35 @@
-use sysinfo::{NetworkExt, System, SystemExt};
+use prettytable::*;
+use sysinfo::{DiskExt, NetworkExt, ProcessExt, System, SystemExt};
 
 pub fn print_system_status() {}
 
 //static
 pub fn print_disks(sys: &System) -> String {
-    let mut res = String::from("");
+    let mut table = Table::new();
+
+    table.add_row(row![
+        "Name",
+        "System",
+        "Type",
+        "removable",
+        "mounted on",
+        "Unuse",
+        "Total"
+    ]);
     for disk in sys.disks() {
-        res += &format!("{:?}\n", disk);
+        let name = disk.name().to_str().unwrap();
+        let system: String = String::from_utf8(disk.file_system().to_owned()).unwrap();
+        let kind: String = format!("{:?}", disk.kind());
+        let removeable = disk.is_removable();
+        let mounted_on = format!("{:?}", disk.mount_point());
+        let unused = disk.available_space();
+        let total = disk.total_space();
+
+        table.add_row(row![
+            name, system, kind, removeable, mounted_on, unused, total
+        ]);
     }
-    return res;
+    return table.to_string();
 }
 
 //static
@@ -22,43 +43,44 @@ pub fn print_components(sys: &System) -> String {
 
 //dynamic
 pub fn print_ram(sys: &System) -> String {
-    let mut res = String::from("");
+    let total_mem = sys.total_memory();
+    let used_mem = sys.used_memory();
+    let total_swap = sys.total_swap();
+    let used_swap = sys.used_swap();
     // RAM and swap information:
-    res += &format!(
-        " total memory: {} bytes\n used memory : {} bytes\n total swap  : {} bytes\n used swap   : {} bytes\n",
-        sys.total_memory(),
-        sys.used_memory(),
-        sys.total_swap(),
-        sys.used_swap()
-    );
-    return res;
+    let table = table![
+        ["Attributes", "Values"],
+        ["Total memory", total_mem],
+        ["Used memory", used_mem],
+        ["Total swap", total_swap],
+        ["Used swap", used_swap]
+    ];
+    return table.to_string();
 }
 
 //dynamic
 pub fn print_networks(sys: &System) -> String {
-    let mut res = String::from("");
+    let mut table = Table::new();
+    table.add_row(row!["Name", "received", "transmitted"]);
     for (interface_name, data) in sys.networks() {
-        res += &format!(
-            "{}: {}/{} B\n",
-            interface_name,
-            data.received(),
-            data.transmitted()
-        );
+        table.add_row(row![interface_name, data.received(), data.transmitted()]);
     }
-    return res;
+    return table.to_string();
 }
 
 //static
 pub fn print_system(sys: &System) -> String {
-    let mut res = String::from("");
-    res += &format!(
-        " System name:             {:?}\n System kernel version:   {:?}\n System OS version:       {:?}\n System host name:        {:?}\n",
-        sys.name().unwrap(),
-        sys.kernel_version().unwrap(),
-        sys.os_version().unwrap(),
-        sys.host_name().unwrap()
-    );
-    return res;
+    let name = sys.name().unwrap_or_default();
+    let kernel_ver = sys.kernel_version().unwrap_or_default();
+    let os_ver = sys.os_version().unwrap_or_default();
+    let host_name = sys.host_name().unwrap_or_default();
+    let mut table = Table::new();
+    table.add_row(row![bFg->"Attributes",bFg->"Values"]);
+    table.add_row(row!["System name", &name]);
+    table.add_row(row!["System kernel version", &kernel_ver]);
+    table.add_row(row!["System OS version", &os_ver]);
+    table.add_row(row!["System Host name", &host_name]);
+    return table.to_string();
 }
 
 //static
@@ -67,17 +89,23 @@ pub fn print_cpu(sys: &System) -> String {
 }
 
 //dynamic
-pub fn print_processes(sys: &System) -> String {
-    let mut res = String::from("");
-    // for (pid, process) in sys.processes() {
-    //     res += &format!("[{}] {} {:?}", pid, process.name(), process.disk_usage());
-    // }
-    res += &format!("{}", sys.processes().len());
-    return res;
-}
-
-pub fn print_division(n: usize) -> String {
-    return "-".repeat(n);
+pub fn print_processes(sys: &mut System, limit: u8) -> String {
+    let mut table = Table::new();
+    table.add_row(row!["pid", "Name", "written", "read"]);
+    let mut i = 0_u8;
+    for (pid, process) in sys.processes() {
+        if i == limit {
+            break;
+        }
+        table.add_row(row![
+            pid,
+            process.name(),
+            process.disk_usage().written_bytes,
+            process.disk_usage().read_bytes
+        ]);
+        i += 1;
+    }
+    return table.to_string();
 }
 
 pub fn clear() {
