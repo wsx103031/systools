@@ -1,39 +1,31 @@
-use std::io::{self, Write};
+use std::{
+    io::{self, Write},
+    thread::sleep,
+    time::Duration,
+};
 
-use crossterm::{execute, queue, style, terminal};
+use crossterm::{
+    cursor,
+    event::{self, Event, KeyEvent, KeyEventKind},
+    execute, queue, style,
+    terminal::{self, ClearType},
+};
 use prettytable::table;
 use sysinfo::{System, SystemExt};
 
-use crate::sys_core::sys_print::*;
+use crate::sys_core::{
+    args::{Objective, ViewArgs},
+    sys_print::*,
+};
 
-use super::args::{Objective, ViewArgs};
+use super::{commands::*, status::*};
 
 pub struct Controller {
     writer: Box<dyn io::Write>,
     status: Status,
     args: ViewArgs,
     system: Box<System>,
-}
-
-#[derive(PartialEq, Eq, PartialOrd, Ord, Debug)]
-pub enum Status {
-    Inactive,
-    Ready,
-    Running,
-    Stopping,
-    Terminating,
-}
-
-/// 先創建必要物件
-pub trait Begin {
-    fn prepare(&mut self) -> &mut Self;
-    fn run(&mut self) -> std::io::Result<&Status>;
-}
-/// 開新執行緒監控鍵盤輸入、更新console資訊
-trait Running {
-    fn receive_keycode(&mut self) -> std::io::Result<&'static Status>;
-    fn update(&mut self);
-    fn refresh_screen(&mut self);
+    commands: CommandSet,
 }
 
 impl Controller {
@@ -45,6 +37,7 @@ impl Controller {
             writer: Box::new(stdout),
             status: Status::Inactive,
             args,
+            commands: CommandSet::none(),
             system: Box::new(System::new_all()),
         }
     }
@@ -70,40 +63,60 @@ impl Begin for Controller {
     fn prepare(&mut self) -> &mut Self {
         self.system.refresh_all();
         self.status = Status::Ready;
+        self.commands = CommandSet::none();
         self
     }
 
-    fn run(&mut self) -> std::io::Result<&Status> {
+    fn run(&mut self) -> std::io::Result<()> {
         if !self.runnable() {
             self.prepare();
         }
-
         execute!(self.writer, terminal::EnterAlternateScreen)?;
         terminal::enable_raw_mode()?;
-        queue!(self.writer, style::Print("123"))?;
-        self.writer.flush()?;
-        // self.status = Status::Running;
-        // while self.runnable() {
-        //     self.update();
-        //     self.stdout.flush()?;
-        // }
+
+        self.status = Status::Running;
+        while Status::Running == self.status {
+            self.update();
+            self.writer.flush()?;
+            if let Ok(Event::Key(KeyEvent {
+                code,
+                kind: KeyEventKind::Press,
+                modifiers: _,
+                state: _,
+            })) = event::read()
+            {
+                if let Some(com) = self.commands.get(code) {
+                    com.execute()?;
+                }
+                return Ok(());
+            }
+            sleep(Duration::new(2, 0));
+        }
+
         execute!(self.writer, terminal::LeaveAlternateScreen)?;
         terminal::disable_raw_mode()?;
-        Ok(&self.status)
+        Ok(())
     }
 }
 
 impl Running for Controller {
-    fn receive_keycode(&mut self) -> std::io::Result<&'static Status> {
-        Ok(&Status::Running)
+    fn receive_keycode(&mut self) -> std::io::Result<()> {
+        Ok(())
     }
 
-    fn update(&mut self) {}
+    fn update(&mut self) {
+        let _ = queue!(
+            self.writer,
+            style::ResetColor,
+            terminal::Clear(ClearType::All),
+            cursor::Hide,
+        );
+        self.refresh_screen();
+    }
     fn refresh_screen(&mut self) {
         match self.args.command {
             Some(Objective::System {}) => {
                 self.system.refresh_system();
-
                 println!("=> system:");
                 print!("{}{}", print_system(&self.system), self.hint());
             }
@@ -118,7 +131,7 @@ impl Running for Controller {
                 println!("=> components:");
                 print!("{}", print_components(&self.system));
             }
-            Some(Objective::Cpu { limit, interval: _ }) => {
+            Some(Objective::Process { limit, interval: _ }) => {
                 self.system.refresh_processes();
                 // Number of CPUs:
                 print!("{}", print_cpu(&self.system));
@@ -136,6 +149,12 @@ impl Running for Controller {
             }
             None => {}
         }
+    }
+}
+
+impl Terminating for Controller {
+    fn terminate(&mut self) -> std::io::Result<()> {
         self.status = Status::Terminating;
+        Ok(())
     }
 }

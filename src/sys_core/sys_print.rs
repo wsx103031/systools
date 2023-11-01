@@ -1,8 +1,6 @@
 use prettytable::*;
 use sysinfo::{DiskExt, NetworkExt, ProcessExt, System, SystemExt};
 
-pub fn print_system_status() {}
-
 //static
 pub fn print_disks(sys: &System) -> String {
     let mut table = Table::new();

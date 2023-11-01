@@ -17,11 +17,11 @@ pub struct ViewArgs {
 #[derive(Subcommand, Debug, Clone, PartialEq, Eq)]
 pub enum Objective {
     Component {},
-    Cpu {
-        #[arg(default_value = "10")]
-        limit: u8,
+    Process {
         #[arg(default_value = "3")]
         interval: u64,
+        #[arg(default_value = "10")]
+        limit: u8,
     },
     Disk {},
     Network {},
@@ -32,11 +32,24 @@ pub enum Objective {
 impl Objective {
     fn _require_dynamic_update(&self) -> bool {
         match self {
-            Objective::Cpu { .. } => true,
+            Objective::Process { .. } => true,
 
             Objective::Network {} => true,
             Objective::Ram {} => true,
             _other => false,
+        }
+    }
+}
+
+impl std::fmt::Display for Objective {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Objective::Component {} => write!(f, "Components"),
+            Objective::Process { limit, interval } => write!(f, "Processes"),
+            Objective::Disk {} => write!(f, "Disks"),
+            Objective::Network {} => write!(f, "Network"),
+            Objective::Ram {} => write!(f, "Ram"),
+            Objective::System {} => write!(f, "System"),
         }
     }
 }

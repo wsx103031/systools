@@ -9,7 +9,7 @@ pub mod sys_core;
 use std::io::{self, stdout, Stdout};
 use sys_core::{
     args::*,
-    controller::{Begin, Controller},
+    cli::{controller::Controller, status::Begin},
 };
 
 async fn _receive_keycode() -> std::io::Result<KeyCode> {
@@ -36,8 +36,8 @@ fn main() -> std::io::Result<()> {
     //use functions from clap to construct custom commands we need.
     let args = ViewArgs::parse();
     let stdout: Stdout = io::stdout();
-    let mut controller = Controller::new(stdout, args);
-    controller.prepare().run()?;
+    let mut controller: Controller = Controller::new(stdout, args);
+    controller.run()?;
     Ok(())
     // match block_on(receive_keycode()) {
     //     Ok(code) => match code {
