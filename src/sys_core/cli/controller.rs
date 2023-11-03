@@ -10,7 +10,7 @@ use crossterm::{
     execute, queue, style,
     terminal::{self, ClearType},
 };
-use prettytable::table;
+
 use sysinfo::{System, SystemExt};
 
 use crate::sys_core::{
@@ -25,7 +25,6 @@ pub struct Controller {
     status: Status,
     args: ViewArgs,
     system: Box<System>,
-    commands: CommandSet,
 }
 
 impl Controller {
@@ -37,7 +36,6 @@ impl Controller {
             writer: Box::new(stdout),
             status: Status::Inactive,
             args,
-            commands: CommandSet::none(),
             system: Box::new(System::new_all()),
         }
     }
@@ -50,24 +48,13 @@ impl Controller {
         self.status == Status::Ready || self.status == Status::Stopping
     }
 
-    fn hint(&self) -> String {
-        let base = table![
-            ["Esc", "p", "n", "u"],
-            ["Quit", "Previous", "Next", "Update"]
-        ];
-        base.to_string()
-    }
-}
-
-impl Begin for Controller {
     fn prepare(&mut self) -> &mut Self {
         self.system.refresh_all();
         self.status = Status::Ready;
-        self.commands = CommandSet::none();
         self
     }
 
-    fn run(&mut self) -> std::io::Result<()> {
+    pub fn run(&mut self) -> std::io::Result<()> {
         if !self.runnable() {
             self.prepare();
         }
@@ -75,50 +62,49 @@ impl Begin for Controller {
         terminal::enable_raw_mode()?;
 
         self.status = Status::Running;
+        let mut commands = command_base_set();
         while Status::Running == self.status {
-            self.update();
-            self.writer.flush()?;
-            if let Ok(Event::Key(KeyEvent {
-                code,
-                kind: KeyEventKind::Press,
-                modifiers: _,
-                state: _,
-            })) = event::read()
-            {
-                if let Some(com) = self.commands.get(code) {
-                    com.execute()?;
-                }
-                return Ok(());
-            }
-            sleep(Duration::new(2, 0));
+            self.update(&mut commands)?;
         }
-
         execute!(self.writer, terminal::LeaveAlternateScreen)?;
         terminal::disable_raw_mode()?;
         Ok(())
     }
-}
 
-impl Running for Controller {
-    fn receive_keycode(&mut self) -> std::io::Result<()> {
+    fn receive_command(&mut self, commands: &mut CommandSet) -> std::io::Result<()> {
+        if let Ok(Event::Key(KeyEvent {
+            code,
+            kind: KeyEventKind::Press,
+            modifiers: _,
+            state: _,
+        })) = event::read()
+        {
+            if let Some(command) = commands.get(code) {
+                command.execute(self)?;
+            }
+        }
         Ok(())
     }
 
-    fn update(&mut self) {
-        let _ = queue!(
+    fn update(&mut self, commands: &mut CommandSet) -> std::io::Result<()> {
+        queue!(
             self.writer,
             style::ResetColor,
             terminal::Clear(ClearType::All),
             cursor::Hide,
-        );
-        self.refresh_screen();
+        )?;
+        self.refresh_screen()?;
+        self.writer.flush()?;
+        self.receive_command(commands)?;
+        sleep(Duration::new(2, 0));
+        Ok(())
     }
-    fn refresh_screen(&mut self) {
+    pub fn refresh_screen(&mut self) -> std::io::Result<()> {
         match self.args.command {
             Some(Objective::System {}) => {
                 self.system.refresh_system();
                 println!("=> system:");
-                print!("{}{}", print_system(&self.system), self.hint());
+                print!("{}", print_system(&self.system));
             }
             Some(Objective::Disk {}) => {
                 self.system.refresh_disks();
@@ -149,11 +135,10 @@ impl Running for Controller {
             }
             None => {}
         }
+        Ok(())
     }
-}
 
-impl Terminating for Controller {
-    fn terminate(&mut self) -> std::io::Result<()> {
+    pub fn terminate(&mut self) -> std::io::Result<()> {
         self.status = Status::Terminating;
         Ok(())
     }

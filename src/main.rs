@@ -7,10 +7,7 @@ use crossterm::{
 };
 pub mod sys_core;
 use std::io::{self, stdout, Stdout};
-use sys_core::{
-    args::*,
-    cli::{controller::Controller, status::Begin},
-};
+use sys_core::{args::*, cli::controller::Controller};
 
 async fn _receive_keycode() -> std::io::Result<KeyCode> {
     execute!(stdout(), EnableMouseCapture)?;

@@ -60,6 +60,7 @@ pub fn print_ram(sys: &System) -> String {
 pub fn print_networks(sys: &System) -> String {
     let mut table = Table::new();
     table.add_row(row!["Name", "received", "transmitted"]);
+
     for (interface_name, data) in sys.networks() {
         table.add_row(row![interface_name, data.received(), data.transmitted()]);
     }
