@@ -1,3 +1,3 @@
-pub mod commands;
 pub mod controller;
+pub mod instruction;
 pub mod status;

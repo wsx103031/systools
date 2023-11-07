@@ -1,7 +1,7 @@
 use std::{
     io::{self, Write},
-    thread::sleep,
-    time::Duration,
+    sync::{mpsc, Arc, Mutex},
+    thread::{self},
 };
 
 use crossterm::{
@@ -13,18 +13,19 @@ use crossterm::{
 
 use sysinfo::{System, SystemExt};
 
-use crate::sys_core::{
-    args::{Objective, ViewArgs},
-    sys_print::*,
-};
+use crate::sys_core::{args::*, sys_print::*};
 
-use super::{commands::*, status::*};
+use super::{instruction::*, status::*};
 
 pub struct Controller {
+    // stdout_transmitter
+    // stdout_receiver
+    /// Should remove in here. And then add transmitter and receiver to handle what relate with stdout.
     writer: Box<dyn io::Write>,
     status: Status,
+    /// Should remove in here. Turn it into pure parameter in the beginning.
     args: ViewArgs,
-    system: Box<System>,
+    system: System,
 }
 
 impl Controller {
@@ -36,7 +37,7 @@ impl Controller {
             writer: Box::new(stdout),
             status: Status::Inactive,
             args,
-            system: Box::new(System::new_all()),
+            system: System::new_all(),
         }
     }
 
@@ -49,7 +50,6 @@ impl Controller {
     }
 
     fn prepare(&mut self) -> &mut Self {
-        self.system.refresh_all();
         self.status = Status::Ready;
         self
     }
@@ -63,30 +63,15 @@ impl Controller {
 
         self.status = Status::Running;
         let mut commands = command_base_set();
-        while Status::Running == self.status {
-            self.update(&mut commands)?;
-        }
+
+        self.update(&mut commands)?;
+
         execute!(self.writer, terminal::LeaveAlternateScreen)?;
         terminal::disable_raw_mode()?;
         Ok(())
     }
 
-    fn receive_command(&mut self, commands: &mut CommandSet) -> std::io::Result<()> {
-        if let Ok(Event::Key(KeyEvent {
-            code,
-            kind: KeyEventKind::Press,
-            modifiers: _,
-            state: _,
-        })) = event::read()
-        {
-            if let Some(command) = commands.get(code) {
-                command.execute(self)?;
-            }
-        }
-        Ok(())
-    }
-
-    fn update(&mut self, commands: &mut CommandSet) -> std::io::Result<()> {
+    fn update(&mut self, instructions: &mut InstructionSet) -> std::io::Result<()> {
         queue!(
             self.writer,
             style::ResetColor,
@@ -94,47 +79,51 @@ impl Controller {
             cursor::Hide,
         )?;
         self.refresh_screen()?;
-        self.writer.flush()?;
-        self.receive_command(commands)?;
-        sleep(Duration::new(2, 0));
+
+        let (tx, rx) = mpsc::channel();
+        let status = Arc::new(Mutex::new(self.status.clone()));
+        let status_in = status.clone();
+        // let end = Arc::new(Mutex::new(false));
+        // let end_in = end.clone();
+        let handle = thread::spawn(move || {
+            while Status::Running == *status_in.lock().unwrap() {
+                if let Ok(Event::Key(KeyEvent {
+                    code,
+                    kind: KeyEventKind::Press,
+                    modifiers: _,
+                    state: _,
+                })) = event::read()
+                {
+                    tx.send(code).unwrap();
+                }
+            }
+        });
+
+        while Status::Running == self.status {
+            while let Ok(code) = rx.try_recv() {
+                if let Some(ins) = instructions.get(code) {
+                    println!("{}", ins.description());
+                    let _ = ins.execute(self);
+                }
+            }
+        }
+        *status.lock().unwrap() = self.status.clone();
+        handle.join().unwrap();
         Ok(())
     }
+
     pub fn refresh_screen(&mut self) -> std::io::Result<()> {
-        match self.args.command {
-            Some(Objective::System {}) => {
-                self.system.refresh_system();
-                println!("=> system:");
-                print!("{}", print_system(&self.system));
-            }
-            Some(Objective::Disk {}) => {
-                self.system.refresh_disks();
-                println!("=> disks:");
-                print!("{}", print_disks(&self.system));
-            }
-            Some(Objective::Component {}) => {
-                self.system.refresh_components();
-                // Components temperature:
-                println!("=> components:");
-                print!("{}", print_components(&self.system));
-            }
-            Some(Objective::Process { limit, interval: _ }) => {
-                self.system.refresh_processes();
-                // Number of CPUs:
-                print!("{}", print_cpu(&self.system));
-                print!("{}", print_processes(&mut self.system, limit));
-            }
-            Some(Objective::Network {}) => {
-                self.system.refresh_networks();
-                // Network interfaces name, data received and data transmitted:
-                println!("=> networks:");
-                print!("{}", print_networks(&self.system));
-            }
-            Some(Objective::Ram {}) => {
-                self.system.refresh_memory();
-                print!("{}", print_ram(&self.system));
-            }
-            None => {}
-        }
+        queue!(self.writer, terminal::Clear(ClearType::All),)?;
+        let res = match self.args.command {
+            Objective::System {} => print_system(&mut self.system),
+            Objective::Disk {} => print_disks(&mut self.system),
+            Objective::Component {} => print_components(&mut self.system),
+            Objective::Process { limit, interval: _ } => print_processes(&mut self.system, limit),
+            Objective::Network {} => print_networks(&mut self.system),
+            Objective::Ram {} => print_ram(&mut self.system),
+        };
+        println!("=>{}:\n{}", &mut self.args.command, res);
+        self.writer.flush()?;
         Ok(())
     }
 

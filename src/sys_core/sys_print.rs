@@ -2,7 +2,8 @@ use prettytable::*;
 use sysinfo::{DiskExt, NetworkExt, ProcessExt, System, SystemExt};
 
 //static
-pub fn print_disks(sys: &System) -> String {
+pub fn print_disks(sys: &mut System) -> String {
+    sys.refresh_disks();
     let mut table = Table::new();
 
     table.add_row(row![
@@ -31,7 +32,8 @@ pub fn print_disks(sys: &System) -> String {
 }
 
 //static
-pub fn print_components(sys: &System) -> String {
+pub fn print_components(sys: &mut System) -> String {
+    sys.refresh_components();
     let mut res = String::from("");
     for component in sys.components() {
         res += &format!("{:?}\n", component);
@@ -40,7 +42,8 @@ pub fn print_components(sys: &System) -> String {
 }
 
 //dynamic
-pub fn print_ram(sys: &System) -> String {
+pub fn print_ram(sys: &mut System) -> String {
+    sys.refresh_memory();
     let total_mem = sys.total_memory();
     let used_mem = sys.used_memory();
     let total_swap = sys.total_swap();
@@ -56,8 +59,9 @@ pub fn print_ram(sys: &System) -> String {
     return table.to_string();
 }
 
-//dynamic
-pub fn print_networks(sys: &System) -> String {
+/// Network interfaces name, data received and data transmitted:
+pub fn print_networks(sys: &mut System) -> String {
+    sys.refresh_networks();
     let mut table = Table::new();
     table.add_row(row!["Name", "received", "transmitted"]);
 
@@ -68,7 +72,8 @@ pub fn print_networks(sys: &System) -> String {
 }
 
 //static
-pub fn print_system(sys: &System) -> String {
+pub fn print_system(sys: &mut System) -> String {
+    sys.refresh_system();
     let name = sys.name().unwrap_or_default();
     let kernel_ver = sys.kernel_version().unwrap_or_default();
     let os_ver = sys.os_version().unwrap_or_default();
@@ -82,13 +87,15 @@ pub fn print_system(sys: &System) -> String {
     return table.to_string();
 }
 
-//static
-pub fn print_cpu(sys: &System) -> String {
+/// Number of CPUs
+pub fn print_cpu(sys: &mut System) -> String {
+    sys.refresh_cpu();
     return format!("NB CPUs: {}\n", sys.cpus().len());
 }
 
 //dynamic
 pub fn print_processes(sys: &mut System, limit: u8) -> String {
+    sys.refresh_processes();
     let mut table = Table::new();
     table.add_row(row!["pid", "Name", "written", "read"]);
     let mut i = 0_u8;
