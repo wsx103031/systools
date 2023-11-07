@@ -7,7 +7,8 @@ use std::{
 use crossterm::{
     cursor,
     event::{self, Event, KeyEvent, KeyEventKind},
-    execute, queue, style,
+    execute, queue,
+    style::{self, Print},
     terminal::{self, ClearType},
 };
 
@@ -72,12 +73,7 @@ impl Controller {
     }
 
     fn update(&mut self, instructions: &mut InstructionSet) -> std::io::Result<()> {
-        queue!(
-            self.writer,
-            style::ResetColor,
-            terminal::Clear(ClearType::All),
-            cursor::Hide,
-        )?;
+        queue!(self.writer, style::ResetColor, cursor::Hide)?;
         self.refresh_screen()?;
 
         let (tx, rx) = mpsc::channel();
@@ -103,7 +99,7 @@ impl Controller {
             while let Ok(code) = rx.try_recv() {
                 if let Some(ins) = instructions.get(code) {
                     println!("{}", ins.description());
-                    let _ = ins.execute(self);
+                    ins.execute(self)?;
                 }
             }
         }
@@ -113,7 +109,6 @@ impl Controller {
     }
 
     pub fn refresh_screen(&mut self) -> std::io::Result<()> {
-        queue!(self.writer, terminal::Clear(ClearType::All),)?;
         let res = match self.args.command {
             Objective::System {} => print_system(&mut self.system),
             Objective::Disk {} => print_disks(&mut self.system),
@@ -122,7 +117,13 @@ impl Controller {
             Objective::Network {} => print_networks(&mut self.system),
             Objective::Ram {} => print_ram(&mut self.system),
         };
-        println!("=>{}:\n{}", &mut self.args.command, res);
+        queue!(
+            self.writer,
+            terminal::Clear(ClearType::All),
+            cursor::MoveTo(1, 1),
+            Print(format!("=> {}:\n{}", &mut self.args.command, res))
+        )?;
+
         self.writer.flush()?;
         Ok(())
     }

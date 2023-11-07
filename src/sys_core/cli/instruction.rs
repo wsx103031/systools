@@ -1,7 +1,6 @@
-use std::{collections::HashMap, io::Result, thread};
+use std::{collections::HashMap, io::Result};
 
-use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
-use futures::{channel::mpsc, SinkExt};
+use crossterm::event::KeyCode;
 use prettytable::{row, Table};
 
 use super::controller::Controller;
@@ -21,9 +20,9 @@ pub fn command_base_set() -> InstructionSet {
         ),
     );
     set.instructions.insert(
-        KeyCode::Backspace,
+        KeyCode::Enter,
         Instruction::new(
-            "Backspace".to_owned(),
+            "Enter".to_owned(),
             "Update".to_owned(),
             Box::new(Controller::refresh_screen),
         ),
@@ -87,31 +86,4 @@ impl Instruction {
         f(controller)?;
         Ok(())
     }
-}
-
-fn _rec_with_send(controller: &mut Controller, instructions: &mut InstructionSet) -> Result<()> {
-    let (mut tx, mut rx) = mpsc::channel(1000);
-
-    let handle = thread::spawn(move || {
-        if let Ok(Event::Key(KeyEvent {
-            code,
-            kind: KeyEventKind::Press,
-            modifiers: _,
-            state: _,
-        })) = event::read()
-        {
-            let _ = tx.send(code);
-        }
-    });
-
-    while !handle.is_finished() {}
-    let code = rx.try_next().unwrap().unwrap();
-
-    if let Some(ins) = instructions.get(code) {
-        ins.execute(controller)?;
-    }
-
-    handle.join().unwrap();
-    _rec_with_send(controller, instructions)?;
-    Ok(())
 }
