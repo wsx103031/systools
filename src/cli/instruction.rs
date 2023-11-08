@@ -1,6 +1,6 @@
 use std::{collections::HashMap, io::Result};
 
-use crossterm::event::KeyCode;
+use crossterm::event::KeyCode::{self, *};
 use prettytable::{row, Table};
 
 use super::controller::Controller;
@@ -11,22 +11,14 @@ pub fn command_base_set() -> InstructionSet {
     let mut set = InstructionSet {
         instructions: HashMap::new(),
     };
-    set.instructions.insert(
-        KeyCode::Esc,
-        Instruction::new(
-            "Esc".to_owned(),
-            "Quit".to_owned(),
-            Box::new(Controller::terminate),
-        ),
+    set.add(Esc, "Esc", "Quit", Box::new(Controller::terminate));
+    set.add(
+        Enter,
+        "Enter",
+        "Update",
+        Box::new(Controller::refresh_screen),
     );
-    set.instructions.insert(
-        KeyCode::Enter,
-        Instruction::new(
-            "Enter".to_owned(),
-            "Update".to_owned(),
-            Box::new(Controller::refresh_screen),
-        ),
-    );
+
     set
 }
 
@@ -35,7 +27,13 @@ pub struct InstructionSet {
 }
 
 impl InstructionSet {
-    fn _add(mut self, key: KeyCode, com: Instruction) {
+    fn add(&mut self, key: KeyCode, name: &str, desc: &str, bind: Bind) {
+        self.insert(
+            key,
+            Instruction::new(name.to_owned(), desc.to_owned(), bind),
+        );
+    }
+    fn insert(&mut self, key: KeyCode, com: Instruction) {
         self.instructions.insert(key, com);
     }
 

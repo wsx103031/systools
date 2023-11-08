@@ -1,9 +1,13 @@
 #![recursion_limit = "10000"]
 extern crate prettytable;
+pub mod args;
+pub mod cli;
+pub mod sys_print;
+
+use args::ViewArgs;
 use clap::Parser;
-pub mod sys_core;
+use cli::controller::Controller;
 use std::io::{self, Stdout};
-use sys_core::{args::*, cli::controller::Controller};
 
 fn main() -> std::io::Result<()> {
     //use functions from clap to construct custom commands we need.

@@ -1,6 +1,27 @@
 use prettytable::*;
 use sysinfo::{DiskExt, NetworkExt, ProcessExt, System, SystemExt};
 
+// struct SystemInfo;
+
+// struct DashBoard;
+
+// impl SystemInfo {
+//     fn disk_title() -> Row {
+//         row![
+//             "Name",
+//             "System",
+//             "Type",
+//             "removable",
+//             "mounted on",
+//             "Unuse",
+//             "Total"
+//         ]
+//     }
+
+//     fn component_title() -> Row {
+//         row!["Temperature", "Max", "Critical", "Label", "Connection"]
+//     }
+// }
 //static
 pub fn print_disks(sys: &mut System) -> String {
     sys.refresh_disks();
@@ -112,8 +133,4 @@ pub fn print_processes(sys: &mut System, limit: u8) -> String {
         i += 1;
     }
     return table.to_string();
-}
-
-pub fn clear() {
-    print!("\x1B[2J\x1B[1;1H");
 }

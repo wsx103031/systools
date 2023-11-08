@@ -14,19 +14,27 @@ use crossterm::{
 
 use sysinfo::{System, SystemExt};
 
-use crate::sys_core::{args::*, sys_print::*};
+use crate::{
+    args::{Objective, ViewArgs},
+    sys_print::*,
+};
 
-use super::{instruction::*, status::*};
+use super::instruction::*;
 
 pub struct Controller {
-    // stdout_transmitter
-    // stdout_receiver
     /// Should remove in here. And then add transmitter and receiver to handle what relate with stdout.
     writer: Box<dyn io::Write>,
     status: Status,
     /// Should remove in here. Turn it into pure parameter in the beginning.
     args: ViewArgs,
     system: System,
+}
+
+#[derive(PartialEq, Eq, PartialOrd, Ord, Debug, Clone, Copy)]
+pub enum Status {
+    Inactive,
+    Running,
+    Terminating,
 }
 
 impl Controller {
@@ -46,19 +54,7 @@ impl Controller {
         &self.status
     }
 
-    fn runnable(&self) -> bool {
-        self.status == Status::Ready || self.status == Status::Stopping
-    }
-
-    fn prepare(&mut self) -> &mut Self {
-        self.status = Status::Ready;
-        self
-    }
-
     pub fn run(&mut self) -> std::io::Result<()> {
-        if !self.runnable() {
-            self.prepare();
-        }
         execute!(self.writer, terminal::EnterAlternateScreen)?;
         terminal::enable_raw_mode()?;
 
@@ -79,8 +75,6 @@ impl Controller {
         let (tx, rx) = mpsc::channel();
         let status = Arc::new(Mutex::new(self.status.clone()));
         let status_in = status.clone();
-        // let end = Arc::new(Mutex::new(false));
-        // let end_in = end.clone();
         let handle = thread::spawn(move || {
             while Status::Running == *status_in.lock().unwrap() {
                 if let Ok(Event::Key(KeyEvent {
@@ -97,10 +91,7 @@ impl Controller {
 
         while Status::Running == self.status {
             while let Ok(code) = rx.try_recv() {
-                if let Some(ins) = instructions.get(code) {
-                    println!("{}", ins.description());
-                    ins.execute(self)?;
-                }
+                instructions.execute(code, self)?;
             }
         }
         *status.lock().unwrap() = self.status.clone();
